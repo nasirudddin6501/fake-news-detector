@@ -14,27 +14,19 @@ import requests
 
 warnings.filterwarnings("ignore")
 
-# ─── Hugging Face dataset download helper ───────────────────────────────────
+# ─── Hugging Face dataset URLs ──────────────────────────────────────────────
 HF_REPO = "nasiruddin6501/fake-news-data"
-HF_FILES = {
-    "train_balanced_clean.csv": "train_balanced_clean.csv",
-    "test_clean.csv":           "test_clean.csv",
-}
+TRAIN_URL = f"https://huggingface.co/datasets/{HF_REPO}/resolve/main/train_balanced_clean.csv"
+TEST_URL  = f"https://huggingface.co/datasets/{HF_REPO}/resolve/main/test_clean.csv"
+
+@st.cache_data(show_spinner=False)
+def load_csv_from_url(url: str) -> pd.DataFrame:
+    """Load CSV directly from URL into DataFrame (cached)."""
+    with st.spinner(f"⬇️ Loading data from Hugging Face…"):
+        return pd.read_csv(url)
 
 def ensure_csv_files():
-    """Download CSVs from Hugging Face if not already present."""
-    base_url = f"https://huggingface.co/datasets/{HF_REPO}/resolve/main"
-    for local_name, remote_name in HF_FILES.items():
-        if not os.path.exists(local_name):
-            url = f"{base_url}/{remote_name}"
-            with st.spinner(f"⬇️ Downloading {local_name} from Hugging Face…"):
-                response = requests.get(url, stream=True)
-                response.raise_for_status()
-                with open(local_name, "wb") as f:
-                    for chunk in response.iter_content(chunk_size=65536):
-                        if chunk:
-                            f.write(chunk)
-    return True
+    return True  # no local files needed
 
 # ─── Page config ────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -321,15 +313,12 @@ def load_models_and_data():
     LANG_COL  = 'language'
     LABEL_MAP = {'positive': 1, 'negative': 0}
 
-    # ── Data loading ──
-    train_path = 'train_balanced_clean.csv'
-    test_path  = 'test_clean.csv'
-
-    if not os.path.exists(train_path) or not os.path.exists(test_path):
-        return None, None, None, None, "CSV files not found"
-
-    df_train = pd.read_csv(train_path)
-    df_test  = pd.read_csv(test_path)
+    # ── Data loading directly from Hugging Face URL ──
+    try:
+        df_train = load_csv_from_url(TRAIN_URL)
+        df_test  = load_csv_from_url(TEST_URL)
+    except Exception as e:
+        return None, None, None, None, f"Failed to load data: {e}"
 
     for df in [df_train, df_test]:
         df.dropna(subset=[TEXT_COL, LABEL_COL], inplace=True)
