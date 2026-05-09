@@ -14,31 +14,26 @@ import requests
 
 warnings.filterwarnings("ignore")
 
-# ─── Google Drive download helper ───────────────────────────────────────────
-DRIVE_FILES = {
-    "train_balanced_clean.csv": "1ItZ9lIq8Lo3vkn754_Q-LDJb-cjWrivV",
-    "test_clean.csv":           "12MpwM_VI5f2HBYpLUHoCQliusvH8LaDn",
+# ─── Hugging Face dataset download helper ───────────────────────────────────
+HF_REPO = "nasiruddin6501/fake-news-data"
+HF_FILES = {
+    "train_balanced_clean.csv": "train_balanced_clean.csv",
+    "test_clean.csv":           "test_clean.csv",
 }
 
-def download_from_drive(file_id: str, dest_path: str):
-    """Download a public Google Drive file using gdown (handles large files)."""
-    import gdown
-    url = f"https://drive.google.com/uc?id={file_id}"
-    gdown.download(url, dest_path, quiet=False, fuzzy=True)
-
-    # Sanity check
-    if not os.path.exists(dest_path) or os.path.getsize(dest_path) < 1000:
-        raise RuntimeError(
-            f"Failed to download {dest_path}. "
-            "Make sure Google Drive sharing is set to 'Anyone with the link'."
-        )
-
 def ensure_csv_files():
-    """Download CSVs from Drive if not already present."""
-    for filename, file_id in DRIVE_FILES.items():
-        if not os.path.exists(filename):
-            with st.spinner(f"⬇️ Downloading {filename} from Google Drive…"):
-                download_from_drive(file_id, filename)
+    """Download CSVs from Hugging Face if not already present."""
+    base_url = f"https://huggingface.co/datasets/{HF_REPO}/resolve/main"
+    for local_name, remote_name in HF_FILES.items():
+        if not os.path.exists(local_name):
+            url = f"{base_url}/{remote_name}"
+            with st.spinner(f"⬇️ Downloading {local_name} from Hugging Face…"):
+                response = requests.get(url, stream=True)
+                response.raise_for_status()
+                with open(local_name, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=65536):
+                        if chunk:
+                            f.write(chunk)
     return True
 
 # ─── Page config ────────────────────────────────────────────────────────────
