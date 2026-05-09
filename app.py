@@ -21,22 +21,47 @@ DRIVE_FILES = {
 }
 
 def download_from_drive(file_id: str, dest_path: str):
-    """Download a public Google Drive file (handles the virus-scan redirect)."""
-    URL = "https://drive.google.com/uc?export=download"
+    """Download a public Google Drive file robustly (handles large-file confirmation)."""
+    import re as _re
     session = requests.Session()
+    URL = "https://drive.google.com/uc?export=download"
+
+    # First request
     response = session.get(URL, params={"id": file_id}, stream=True)
-    # For large files Drive returns a confirmation page
+
+    # Look for confirmation token in cookies
     token = None
     for key, value in response.cookies.items():
         if key.startswith("download_warning"):
             token = value
             break
+
+    # Also check HTML body for newer Drive confirmation
+    if token is None:
+        chunk = next(response.iter_content(8192), b"")
+        match = _re.search(rb'confirm=([0-9A-Za-z_\-]+)', chunk)
+        if match:
+            token = match.group(1).decode()
+
+    # Second request with confirmation
     if token:
         response = session.get(URL, params={"id": file_id, "confirm": token}, stream=True)
+
+    # Write to disk
     with open(dest_path, "wb") as f:
-        for chunk in response.iter_content(32768):
+        for chunk in response.iter_content(65536):
             if chunk:
                 f.write(chunk)
+
+    # Sanity check — if we got HTML instead of CSV, raise error
+    with open(dest_path, "rb") as f:
+        head = f.read(20)
+    if head.strip().startswith(b"<!"):
+        os.remove(dest_path)
+        raise RuntimeError(
+            f"Failed to download {dest_path}. "
+            "Make sure Google Drive sharing is set to \'Anyone with the link\'."
+        )
 
 def ensure_csv_files():
     """Download CSVs from Drive if not already present."""
